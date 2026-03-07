@@ -16,18 +16,31 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: ./backend
     container_name: market-radar-backend
+    build: ./backend
+    restart: always
+    env_file: .env
+    # 監視スクリプト(main.py)とサーバー(api.py)を同時に立ち上げるための設定
+    # ※api.pyの中で監視を回さない場合は、ここをuvicorn起動にする
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
     depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - .env
-    volumes:
-      - ./backend:/app
-    # 今回は定期実行を想定せず、一度動いて終了する形にします
-    # 継続監視にする場合は main.py でループさせる必要があります
+      - db
+    networks:
+      - market_radar_net
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.market-radar-api.rule=Host(`${DOMAIN_RADAR_API}`)"
+      - "traefik.http.routers.market-radar-api.entrypoints=websecure"
+      - "traefik.http.routers.market-radar-api.tls=true"
+      - "traefik.http.routers.market-radar-api.tls.certresolver=${CERT_RESOLVER}"
+      - "traefik.http.services.market-radar-api.loadbalancer.server.port=8000"
+      - "traefik.docker.network=traefik-public"
+
+networks:
+  market_radar_net:
+  traefik-public:
+    external: true
 
 volumes:
   postgres_data:

@@ -42,3 +42,25 @@ def save_article(url, title, analysis):
             )
             conn.commit()
             
+def get_latest_articles(limit=10):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT title, analysis, created_at FROM articles ORDER BY created_at DESC LIMIT %s",
+        (limit,)
+    )
+    rows = cur.fetchall()
+    
+    # フロントエンド（Tailwind）で扱いやすいように辞書形式にする
+    articles = []
+    for row in rows:
+        articles.append({
+            "title": row[0],
+            "analysis": row[1],
+            "created_at": row[2].isoformat()
+        })
+    
+    cur.close()
+    conn.close()
+    return articles
+                
