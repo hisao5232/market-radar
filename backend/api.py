@@ -1,10 +1,25 @@
 from fastapi import FastAPI, Depends, HTTPException, Security
 from fastapi.security.api_key import APIKeyHeader
+from fastapi.middleware.cors import CORSMiddleware
 from starlette import status
 import os
 import db
 
 app = FastAPI(title="Market Radar API")
+
+origins = [
+    "https://go-pro-world.net",         # 本番ドメイン
+    "https://*.pages.dev",              # Cloudflare Pagesのプレビュー用
+    "http://localhost:3000",            # ローカル開発用
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,              # 許可するオリジン
+    allow_credentials=True,
+    allow_methods=["*"],                # 全てのメソッド（GET, POSTなど）を許可
+    allow_headers=["*"],                # 全てのヘッダー（X-API-Keyなど）を許可
+)
 
 # ヘッダーの名前を定義
 API_KEY_NAME = "X-API-Key"
