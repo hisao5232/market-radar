@@ -3,11 +3,11 @@ import ReactMarkdown from 'react-markdown';
 export default async function Home() {
   // 1. バックエンドからデータを取得（Fetch）
   // cache: 'no-store' を追加して、DBの更新を即座に反映させる
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles?limit=10`, {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles`, { // ?limit=10 を削除
     headers: {
       'X-API-Key': process.env.API_KEY || '',
     },
-    cache: 'no-store' // 確実に最新の4件（またはそれ以上）を出すため
+    cache: 'no-store' 
   });
 
   if (!res.ok) {
@@ -32,7 +32,7 @@ export default async function Home() {
             Market Radar <span className="text-blue-600">v1.0</span>
           </h1>
           <p className="text-slate-600 text-lg">
-            1983年生まれのエンジニアが贈る、AIによる最新市場ニュース分析
+            AIによる最新市場ニュース分析と株価の変動をリアルタイムでお届けします
           </p>
         </header>
         
@@ -85,7 +85,7 @@ export default async function Home() {
         </div>
 
         <footer className="mt-20 text-center text-slate-400 text-sm pb-10">
-          &copy; 2026 hisao5232 | Built with Next.js & FastAPI
+          &copy; Go-into-PG-world Since 2025. All rights reserved.
         </footer>
       </div>
     </main>
