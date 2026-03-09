@@ -43,13 +43,18 @@ def save_article(url, title, analysis):
             )
             conn.commit()
             
-def get_latest_articles(limit=10):
+def get_latest_articles(limit=None):
     conn = get_connection()
     cur = conn.cursor()
-    cur.execute(
-        "SELECT title, analysis, created_at FROM articles ORDER BY created_at DESC LIMIT %s",
-        (limit,)
-    )
+    
+    if limit:
+        query = "SELECT title, analysis, created_at FROM articles ORDER BY created_at DESC LIMIT %s"
+        cur.execute(query, (limit,))
+    else:
+        # limit が指定されていない場合は全件取得
+        query = "SELECT title, analysis, created_at FROM articles ORDER BY created_at DESC"
+        cur.execute(query)
+        
     rows = cur.fetchall()
     
     # フロントエンド（Tailwind）で扱いやすいように辞書形式にする

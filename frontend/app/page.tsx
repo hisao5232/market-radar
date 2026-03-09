@@ -1,5 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 
+export const runtime = 'edge';
+
 export default async function Home() {
   // 1. バックエンドからデータを取得（Fetch）
   // cache: 'no-store' を追加して、DBの更新を即座に反映させる

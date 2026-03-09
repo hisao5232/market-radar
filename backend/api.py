@@ -43,7 +43,8 @@ def read_root():
 
 # 認証が必要なエンドポイントに Depends(get_api_key) を追加
 @app.get("/articles")
-def get_articles(limit: int = 10, api_key: str = Depends(get_api_key)):
-    """最 新 の 分 析 記 事 を 取 得 す る (認証必須)"""
+def get_articles(limit: int = None, api_key: str = Depends(get_api_key)):
+    """最新の分析記事を取得する。limitがなければ全件返す"""
+    # db.get_latest_articles に limit を渡す（Noneなら全件取得するように db.py も合わせる）
     articles = db.get_latest_articles(limit)
     return articles
