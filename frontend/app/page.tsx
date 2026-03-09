@@ -2,8 +2,9 @@ import ReactMarkdown from 'react-markdown';
 
 export const runtime = 'edge';
 
-// 型を定義しておくとメンテナンスが楽になります
+// 型定義の強化
 interface Article {
+  id: number; // バックエンドのJSONに合わせて追加
   title: string;
   analysis: string;
   created_at: string;
@@ -11,32 +12,45 @@ interface Article {
 }
 
 export default async function Home() {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, ''); // 末尾のスラッシュを削除
-  
-  if (!baseUrl) {
-    console.error("API URL is not defined");
-  }
+  // 1. 環境変数の取得とスラッシュ処理
+  const rawBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://radar-api.go-pro-world.net';
+  const baseUrl = rawBaseUrl.replace(/\/$/, '');
+  const apiKey = process.env.API_KEY || 'hisao_secure_radar_2026';
 
+  // 2. バックエンドからデータを取得
   const res = await fetch(`${baseUrl}/articles`, {
     headers: {
-      'X-API-Key': process.env.API_KEY || '',
+      'X-API-Key': apiKey,
     },
     cache: 'no-store' 
   });
 
+  // 3. エラーハンドリング
   if (!res.ok) {
-    // 403 Forbidden などのエラー内容をログに出すとデバッグが捗ります
-    console.error(`Fetch failed: ${res.status}`);
+    console.error(`Fetch failed: ${res.status} to ${baseUrl}`);
     return (
       <main className="flex items-center justify-center min-h-screen">
-        <div className="p-6 bg-red-50 text-red-700 rounded-lg border border-red-200">
-          データの取得に失敗しました。ステータス: {res.status}
+        <div className="p-6 bg-red-50 text-red-700 rounded-lg border border-red-200 shadow-lg text-center">
+          <p className="font-bold text-xl mb-2">データの取得に失敗しました</p>
+          <p className="text-sm opacity-80">ステータス: {res.status}</p>
+          <p className="text-xs mt-2 font-mono">{baseUrl}</p>
         </div>
       </main>
     );
   }
 
-  const articles = await res.json();
+  const articles: Article[] = await res.json();
+
+  // 4. データが 0 件の場合の処理
+  if (articles.length === 0) {
+    return (
+      <main className="flex items-center justify-center min-h-screen">
+        <div className="p-6 bg-yellow-50 text-yellow-700 rounded-lg border border-yellow-200 shadow-lg">
+          表示できるニュースがまだありません（DBを確認してください）
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-12">
@@ -51,10 +65,10 @@ export default async function Home() {
         </header>
         
         <div className="grid gap-10">
-          {articles.map((article: any, index: number) => (
+          {articles.map((article: Article) => (
             <article 
-              // id が取得できていない場合に備え、url または index を含めた一意のキーにする
-              key={article.url || index} 
+              // 前回の「見れていた時」と同様、存在する ID をキーにする
+              key={article.id} 
               className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300"
             >
               <div className="p-8">
@@ -63,7 +77,10 @@ export default async function Home() {
                 </h2>
 
                 <div className="flex items-center gap-4 text-xs font-medium text-slate-400 mb-8">
-                  <time dateTime={article.created_at} className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full uppercase tracking-wider">
+                  <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full uppercase tracking-wider">
+                    ID: {article.id}
+                  </span>
+                  <time dateTime={article.created_at} className="text-slate-500">
                     {new Date(article.created_at).toLocaleString('ja-JP', {
                       year: 'numeric',
                       month: 'long',
