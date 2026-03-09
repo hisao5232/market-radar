@@ -2,10 +2,22 @@ import ReactMarkdown from 'react-markdown';
 
 export const runtime = 'edge';
 
+// 型を定義しておくとメンテナンスが楽になります
+interface Article {
+  title: string;
+  analysis: string;
+  created_at: string;
+  url?: string;
+}
+
 export default async function Home() {
-  // 1. バックエンドからデータを取得（Fetch）
-  // cache: 'no-store' を追加して、DBの更新を即座に反映させる
-  const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/articles`, { // ?limit=10 を削除
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, ''); // 末尾のスラッシュを削除
+  
+  if (!baseUrl) {
+    console.error("API URL is not defined");
+  }
+
+  const res = await fetch(`${baseUrl}/articles`, {
     headers: {
       'X-API-Key': process.env.API_KEY || '',
     },
