@@ -24,7 +24,7 @@ services:
     env_file: .env
     # 監視スクリプト(main.py)とサーバー(api.py)を同時に立ち上げるための設定
     # ※api.pyの中で監視を回さない場合は、ここをuvicorn起動にする
-    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    command: uvicorn api:app --host 0.0.0.0 --port 8021
     depends_on:
       - db
     networks:
@@ -36,7 +36,7 @@ services:
       - "traefik.http.routers.market-radar-api.entrypoints=websecure"
       - "traefik.http.routers.market-radar-api.tls=true"
       - "traefik.http.routers.market-radar-api.tls.certresolver=${CERT_RESOLVER}"
-      - "traefik.http.services.market-radar-api.loadbalancer.server.port=8000"
+      - "traefik.http.services.market-radar-api.loadbalancer.server.port=8021"
       - "traefik.docker.network=traefik-public"
 
 networks:

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta
 import psycopg2
 from psycopg2.extras import DictCursor
 
@@ -63,4 +64,15 @@ def get_latest_articles(limit=10):
     cur.close()
     conn.close()
     return articles
-                
+
+def delete_old_articles():
+    conn = get_connection()
+    cur = conn.cursor()
+    # 7日以上前のデータを削除
+    one_week_ago = datetime.now() - timedelta(days=7)
+    cur.execute("DELETE FROM articles WHERE created_at < %s", (one_week_ago,))
+    conn.commit()
+    print(f"[{datetime.now()}] Deleted old articles before {one_week_ago}")
+    cur.close()
+    conn.close()
+                    
