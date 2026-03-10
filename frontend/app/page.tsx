@@ -57,40 +57,57 @@ export default async function Home() {
       <div className="max-w-4xl mx-auto">
         <header className="mb-12 border-b border-slate-200 pb-8 text-center md:text-left">
           <h1 className="text-4xl font-black text-slate-900 mb-3 tracking-tight">
-            Market Radar <span className="text-blue-600">v1.0</span>
+            Market Radar <span className="text-blue-600">v1.1</span>
           </h1>
           <p className="text-slate-600 text-lg">
             AIによる最新市場ニュース分析と株価の変動をリアルタイムでお届けします
           </p>
         </header>
-        
+
         <div className="grid gap-10">
           {articles.map((article: Article) => (
-            <article 
-              // 前回の「見れていた時」と同様、存在する ID をキーにする
-              key={article.id} 
+            <article
+              key={article.id}
               className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-xl transition-all duration-300"
             >
               <div className="p-8">
-                <h2 className="text-2xl font-bold text-slate-800 mb-4 leading-snug">
+                {/* ニュースタイトル */}
+                <h2 className="text-2xl font-bold text-slate-800 mb-6 leading-snug">
                   {article.title}
                 </h2>
 
-                <div className="flex items-center gap-4 text-xs font-medium text-slate-400 mb-8">
-                  <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-full uppercase tracking-wider">
-                    ID: {article.id}
-                  </span>
-                  <time dateTime={article.created_at} className="text-slate-500">
-                    {new Date(article.created_at).toLocaleString('ja-JP', {
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </time>
+                {/* メタ情報バッジ */}
+                <div className="flex flex-wrap items-center gap-3 text-xs font-bold mb-8">
+                  {/* 元記事リンクボタン：クリックすると別タブで開く */}
+                  {article.url && (
+                    <a 
+                      href={article.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md active:scale-95 border-b-2 border-blue-800"
+                    >
+                      <span className="text-sm">🔗</span>
+                      <span>ニュース元記事を見る</span>
+                    </a>
+                  )}
+                  
+                  {/* 日本時間表示 */}
+                  <div className="flex items-center gap-1.5 text-slate-500 bg-slate-50 px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+                    <span>🕒</span>
+                    <time dateTime={article.created_at}>
+                      {new Date(article.created_at).toLocaleString('ja-JP', {
+                        timeZone: 'Asia/Tokyo',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })} (JST)
+                    </time>
+                  </div>
                 </div>
 
+                {/* AI分析カード */}
                 <div className="bg-blue-50/40 rounded-2xl p-6 md:p-8 border border-blue-100/50">
                   <div className="flex items-center gap-2 mb-6">
                     <span className="text-2xl">🤖</span>
@@ -99,8 +116,8 @@ export default async function Home() {
                     </h3>
                   </div>
 
-                  <div className="prose prose-slate prose-blue max-w-none 
-                    text-slate-700 
+                  <div className="prose prose-slate prose-blue max-w-none
+                    text-slate-700
                     prose-headings:text-blue-900 prose-headings:font-bold prose-headings:mt-6 prose-headings:mb-3
                     prose-p:leading-relaxed prose-p:mb-4
                     prose-li:my-1
@@ -115,7 +132,7 @@ export default async function Home() {
           ))}
         </div>
 
-        <footer className="mt-20 text-center text-slate-400 text-sm pb-10">
+        <footer className="mt-20 text-center text-slate-400 text-sm pb-10 border-t border-slate-200 pt-10">
           &copy; Go-into-PG-world Since 2025. All rights reserved.
         </footer>
       </div>

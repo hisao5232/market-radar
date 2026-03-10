@@ -48,11 +48,11 @@ def get_latest_articles(limit=None):
     cur = conn.cursor()
     
     if limit:
-        query = "SELECT title, analysis, created_at FROM articles ORDER BY created_at DESC LIMIT %s"
+        query = "SELECT title, analysis, created_at, url FROM articles ORDER BY created_at DESC LIMIT %s"
         cur.execute(query, (limit,))
     else:
         # limit が指定されていない場合は全件取得
-        query = "SELECT title, analysis, created_at FROM articles ORDER BY created_at DESC"
+        query = "SELECT title, analysis, created_at, url FROM articles ORDER BY created_at DESC"
         cur.execute(query)
         
     rows = cur.fetchall()
@@ -63,7 +63,8 @@ def get_latest_articles(limit=None):
         articles.append({
             "title": row[0],
             "analysis": row[1],
-            "created_at": row[2].isoformat()
+            "created_at": row[2].isoformat(),
+            "url": row[3]
         })
     
     cur.close()

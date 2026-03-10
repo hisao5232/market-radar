@@ -22,8 +22,6 @@ services:
     build: ./backend
     restart: always
     env_file: .env
-    # 監視スクリプト(main.py)とサーバー(api.py)を同時に立ち上げるための設定
-    # ※api.pyの中で監視を回さない場合は、ここをuvicorn起動にする
     command: uvicorn api:app --host 0.0.0.0 --port 8021
     depends_on:
       - db
@@ -39,6 +37,29 @@ services:
       - "traefik.http.services.market-radar-api.loadbalancer.server.port=8021"
       - "traefik.docker.network=traefik-public"
 
+  frontend:
+    container_name: market-radar-frontend
+    build: 
+      context: ./frontend
+      # ビルド時に環境変数を注入（Next.jsの静的生成に必要）
+      args:
+        - NEXT_PUBLIC_API_URL=https://${DOMAIN_RADAR_API}
+    restart: always
+    environment:
+      - NEXT_PUBLIC_API_URL=https://${DOMAIN_RADAR_API}
+      - API_KEY=${API_KEY}
+    networks:
+      - market_radar_net
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.market-radar-front.rule=Host(`${DOMAIN_RADAR_FRONT}`)"
+      - "traefik.http.routers.market-radar-front.entrypoints=websecure"
+      - "traefik.http.routers.market-radar-front.tls=true"
+      - "traefik.http.routers.market-radar-front.tls.certresolver=${CERT_RESOLVER}"
+      - "traefik.http.services.market-radar-front.loadbalancer.server.port=3000"
+      - "traefik.docker.network=traefik-public"
+
 networks:
   market_radar_net:
   traefik-public:
@@ -46,4 +67,3 @@ networks:
 
 volumes:
   postgres_data:
-  
