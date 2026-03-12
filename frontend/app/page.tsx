@@ -2,12 +2,19 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Sparkline } from '../components/MarketDashboard';
 
+interface ImpactedCompany {
+  name: string;
+  ticker: string;
+  reason: string;
+}
+
 interface Article {
   id: number;
   title: string;
   analysis: string;
   created_at: string;
   url?: string;
+  impacted_companies?: ImpactedCompany[];
 }
 
 interface MarketData {
@@ -16,7 +23,6 @@ interface MarketData {
   orukan: { current: number; history: number[] };
 }
 
-// 日本時間 (JST) への変換と秒のカットを行うヘルパー
 const formatJST = (dateString: string) => {
   const date = new Date(dateString);
   return new Intl.DateTimeFormat('ja-JP', {
@@ -33,7 +39,6 @@ const formatJST = (dateString: string) => {
 export default async function Home() {
   const baseUrl = 'https://radar-api.go-pro-world.net';
   const apiKey = 'hisao_secure_radar_2026';
-
   let articles: Article[] = [];
   let market: MarketData | null = null;
   let error: string | null = null;
@@ -49,11 +54,9 @@ export default async function Home() {
         cache: 'no-store',
       })
     ]);
-
     if (!articlesRes.ok) throw new Error(`Articles API: ${articlesRes.status}`);
     articles = await articlesRes.json();
     if (marketRes.ok) market = await marketRes.json();
-
   } catch (err: any) {
     console.error("Server Fetch Error:", err);
     error = err.message;
@@ -76,7 +79,6 @@ export default async function Home() {
               </div>
             )}
           </div>
-
           {market && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
               {[
@@ -107,10 +109,54 @@ export default async function Home() {
               <article key={article.id} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
                 <div className="p-8">
                   <h2 className="text-2xl font-black mb-6 leading-tight tracking-tight text-slate-800">{article.title}</h2>
-                  <div className="flex flex-wrap items-center gap-4 mb-8">
+                  
+                  {/* --- 影響企業タグ（上場・未上場の判別ロジック） --- */}
+                  {article.impacted_companies && article.impacted_companies.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {article.impacted_companies.map((co, i) => {
+                        const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
+                        const tagClasses = isPublic 
+                          ? "bg-blue-50 border-blue-100 group hover:bg-blue-600 hover:border-blue-600 shadow-sm"
+                          : "bg-slate-100 border-slate-200 cursor-default opacity-80";
+                        
+                        const TagInner = (
+                          <>
+                            <span className={`font-mono text-[10px] font-black uppercase tracking-tighter ${isPublic ? 'text-blue-600 group-hover:text-blue-100' : 'text-slate-400'}`}>
+                              {isPublic ? co.ticker : 'PRIVATE'}
+                            </span>
+                            <span className={`font-bold text-[11px] ${isPublic ? 'text-slate-700 group-hover:text-white' : 'text-slate-500'}`}>
+                              {co.name}
+                            </span>
+                            <span className={`w-1.5 h-1.5 rounded-full ${isPublic ? 'bg-blue-400 group-hover:bg-blue-200 animate-pulse' : 'bg-slate-300'}`} />
+                          </>
+                        );
+
+                        return isPublic ? (
+                          <a 
+                            key={i}
+                            href={co.ticker.includes('.T') 
+                              ? `https://finance.yahoo.co.jp/quote/${co.ticker}` 
+                              : `https://finance.yahoo.com/quote/${co.ticker}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`flex items-center gap-2 border px-3 py-1.5 rounded-lg transition-all ${tagClasses}`}
+                            title={co.reason}
+                          >
+                            {TagInner}
+                          </a>
+                        ) : (
+                          <div key={i} className={`flex items-center gap-2 border px-3 py-1.5 rounded-lg ${tagClasses}`} title={co.reason}>
+                            {TagInner}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-4 mb-8 pt-4 border-t border-slate-50">
                     {article.url && (
-                      <a href={article.url} target="_blank" rel="noopener noreferrer" 
-                         className="bg-slate-900 text-white px-5 py-2 rounded-xl text-[10px] font-black tracking-widest hover:bg-blue-600 transition-colors">
+                      <a href={article.url} target="_blank" rel="noopener noreferrer"
+                         className="bg-slate-900 text-white px-5 py-2 rounded-xl text-[10px] font-black tracking-widest hover:bg-blue-600 transition-colors shadow-sm">
                         READ SOURCE
                       </a>
                     )}
@@ -121,6 +167,7 @@ export default async function Home() {
                       </span>
                     </div>
                   </div>
+
                   <div className="bg-slate-50/80 rounded-2xl p-6 md:p-8 border border-slate-100">
                     <div className="prose prose-slate max-w-none text-slate-600 text-sm leading-relaxed prose-strong:text-blue-700 prose-strong:font-black">
                       <ReactMarkdown>{article.analysis}</ReactMarkdown>
@@ -134,7 +181,7 @@ export default async function Home() {
 
         <footer className="mt-20 text-center pb-12 border-t border-slate-200 pt-12">
           <p className="text-slate-300 text-[10px] font-bold tracking-[0.5em] uppercase mb-4">Global Pro Maintenance Protocol</p>
-          <p className="text-slate-400 text-xs italic">&copy; 2026 Hisao. Market Radar v1.1.</p>
+          <p className="text-slate-400 text-xs italic">&copy; 2026 Hisao. Market Radar v1.2.</p>
         </footer>
       </div>
     </main>
