@@ -9,4 +9,6 @@ fastapi
 uvicorn
 yfinance
 plotly
-
+pandas
+openpyxl
+xlrd
