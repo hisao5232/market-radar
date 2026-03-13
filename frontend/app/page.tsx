@@ -6,6 +6,7 @@ interface ImpactedCompany {
   name: string;
   ticker: string;
   reason: string;
+  chartHtml?: string; // バックエンドから受け取るHTML文字列
 }
 
 interface Article {
@@ -54,9 +55,36 @@ export default async function Home() {
         cache: 'no-store',
       })
     ]);
+
     if (!articlesRes.ok) throw new Error(`Articles API: ${articlesRes.status}`);
     articles = await articlesRes.json();
     if (marketRes.ok) market = await marketRes.json();
+
+    // --- バックエンドで生成されたチャートHTMLを一括取得 ---
+    articles = await Promise.all(articles.map(async (article) => {
+      if (!article.impacted_companies) return article;
+
+      const updatedCompanies = await Promise.all(article.impacted_companies.map(async (co) => {
+        const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
+        if (!isPublic) return co;
+
+        try {
+          // 生データではなく、描画済みのHTMLをリクエスト
+          const chartRes = await fetch(`${baseUrl}/stock-chart/${co.ticker}`, {
+            headers: { 'X-API-Key': apiKey },
+            next: { revalidate: 3600 } 
+          });
+          const chartHtml = chartRes.ok ? await chartRes.text() : "";
+          return { ...co, chartHtml };
+        } catch (err) {
+          console.error(`Chart Fetch Error for ${co.ticker}:`, err);
+          return { ...co, chartHtml: "" };
+        }
+      }));
+
+      return { ...article, impacted_companies: updatedCompanies };
+    }));
+
   } catch (err: any) {
     console.error("Server Fetch Error:", err);
     error = err.message;
@@ -69,7 +97,7 @@ export default async function Home() {
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
               <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tighter italic">
-                MARKET RADAR <span className="text-blue-600 not-italic">v1.2</span>
+                MARKET RADAR <span className="text-blue-600 not-italic">v1.3</span>
               </h1>
               <p className="text-slate-500 font-medium">2026.03 AI-Driven Market Intelligence</p>
             </div>
@@ -110,43 +138,52 @@ export default async function Home() {
                 <div className="p-8">
                   <h2 className="text-2xl font-black mb-6 leading-tight tracking-tight text-slate-800">{article.title}</h2>
                   
-                  {/* --- 影響企業タグ（上場・未上場の判別ロジック） --- */}
                   {article.impacted_companies && article.impacted_companies.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                       {article.impacted_companies.map((co, i) => {
                         const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
                         const tagClasses = isPublic 
-                          ? "bg-blue-50 border-blue-100 group hover:bg-blue-600 hover:border-blue-600 shadow-sm"
-                          : "bg-slate-100 border-slate-200 cursor-default opacity-80";
+                          ? "bg-blue-50 border-blue-100 group hover:border-blue-400 shadow-sm"
+                          : "bg-slate-50 border-slate-100 cursor-default opacity-80";
                         
-                        const TagInner = (
-                          <>
-                            <span className={`font-mono text-[10px] font-black uppercase tracking-tighter ${isPublic ? 'text-blue-600 group-hover:text-blue-100' : 'text-slate-400'}`}>
-                              {isPublic ? co.ticker : 'PRIVATE'}
-                            </span>
-                            <span className={`font-bold text-[11px] ${isPublic ? 'text-slate-700 group-hover:text-white' : 'text-slate-500'}`}>
-                              {co.name}
-                            </span>
-                            <span className={`w-1.5 h-1.5 rounded-full ${isPublic ? 'bg-blue-400 group-hover:bg-blue-200 animate-pulse' : 'bg-slate-300'}`} />
-                          </>
-                        );
+                        return (
+                          <div key={i} className={`flex flex-col p-4 rounded-2xl border transition-all ${tagClasses}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`font-mono text-[10px] font-black uppercase tracking-tighter ${isPublic ? 'text-blue-600' : 'text-slate-400'}`}>
+                                  {isPublic ? co.ticker : 'PRIVATE'}
+                                </span>
+                                <span className={`font-bold text-xs ${isPublic ? 'text-slate-800' : 'text-slate-500'}`}>
+                                  {co.name}
+                                </span>
+                              </div>
+                              <span className={`w-2 h-2 rounded-full ${isPublic ? 'bg-blue-400 animate-pulse' : 'bg-slate-300'}`} />
+                            </div>
 
-                        return isPublic ? (
-                          <a 
-                            key={i}
-                            href={co.ticker.includes('.T') 
-                              ? `https://finance.yahoo.co.jp/quote/${co.ticker}` 
-                              : `https://finance.yahoo.com/quote/${co.ticker}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`flex items-center gap-2 border px-3 py-1.5 rounded-lg transition-all ${tagClasses}`}
-                            title={co.reason}
-                          >
-                            {TagInner}
-                          </a>
-                        ) : (
-                          <div key={i} className={`flex items-center gap-2 border px-3 py-1.5 rounded-lg ${tagClasses}`} title={co.reason}>
-                            {TagInner}
+                            <p className="text-[10px] text-slate-500 leading-snug mb-3 italic">
+                              {co.reason}
+                            </p>
+
+                            {/* バックエンドで描画済みのHTMLを安全に埋め込む */}
+                            {isPublic && co.chartHtml && (
+                              <div 
+                                className="mt-3 overflow-hidden rounded-xl border border-slate-100 bg-white min-h-[120px]"
+                                dangerouslySetInnerHTML={{ __html: co.chartHtml }} 
+                              />
+                            )}
+                            
+                            {isPublic && (
+                              <a 
+                                href={co.ticker.includes('.T') 
+                                  ? `https://finance.yahoo.co.jp/quote/${co.ticker}` 
+                                  : `https://finance.yahoo.com/quote/${co.ticker}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="mt-2 text-right text-[9px] font-black text-blue-500 hover:text-blue-700 uppercase tracking-widest"
+                              >
+                                View Details →
+                              </a>
+                            )}
                           </div>
                         );
                       })}
@@ -181,7 +218,7 @@ export default async function Home() {
 
         <footer className="mt-20 text-center pb-12 border-t border-slate-200 pt-12">
           <p className="text-slate-300 text-[10px] font-bold tracking-[0.5em] uppercase mb-4">Global Pro Maintenance Protocol</p>
-          <p className="text-slate-400 text-xs italic">&copy; 2026 Hisao. Market Radar v1.2.</p>
+          <p className="text-slate-400 text-xs italic">&copy; 2026 Hisao. Market Radar v1.3.</p>
         </footer>
       </div>
     </main>

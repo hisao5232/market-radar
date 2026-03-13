@@ -8,3 +8,5 @@ groq
 fastapi
 uvicorn
 yfinance
+plotly
+
