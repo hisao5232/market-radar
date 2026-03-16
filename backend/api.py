@@ -2,12 +2,28 @@ from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette import status
+from contextlib import asynccontextmanager
 import os
 import db
 import yfinance as yf
 import plotly.graph_objects as go
 
-app = FastAPI(title="Market Radar API v1.2")
+# --- lifespan (起動時処理) の定義 ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # アプリ起動時に実行される処理
+    print("Initializing database...")
+    try:
+        db.init_db() # ここでテーブル作成を実行
+        print("Database initialized successfully.")
+    except Exception as e:
+        print(f"Failed to initialize database: {e}")
+    
+    yield
+    # アプリ終了時に実行したい処理があればここに記述（今回は不要）
+
+# FastAPIの引数に lifespan を追加
+app = FastAPI(title="Market Radar API v1.2", lifespan=lifespan)
 
 # サーバー間通信がメインになるためoriginsは現状維持でOK
 origins = [
