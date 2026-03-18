@@ -12,7 +12,7 @@ import db
 def get_verified_companies(raw_companies):
     """
     AIが抽出した企業名リストをCSVと照合して正確なティッカーを付与する。
-    部分一致の精度を高め、最も適切な候補を選択するように改良。
+    CSV側の名称に含まれる不要なスペースを無視してマッチングを行う。
     """
     csv_path = os.path.join(os.path.dirname(__file__), "stock_list.csv")
     if not os.path.exists(csv_path):
@@ -20,46 +20,53 @@ def get_verified_companies(raw_companies):
 
     # CSV読み込み
     df = pd.read_csv(csv_path)
-    # 辞書化（完全一致用：高速化）
-    ticker_map = dict(zip(df['name'], df['ticker']))
+    
+    # --- スペース対策の事前準備 ---
+    # CSV側の名称から全角・半角スペースをすべて除去した比較用の列を作成
+    df['clean_name'] = df['name'].str.replace(r'\s+', '', regex=True)
     
     verified = []
     for co in raw_companies:
-        name = co.get("name", "").strip()
-        if not name:
+        raw_name = co.get("name", "").strip()
+        if not raw_name:
             continue
             
+        # 検索キーワードからもスペースを除去
+        search_name = raw_name.replace(" ", "").replace("　", "")
+        
         ticker = None
-        verified_name = name
+        verified_name = raw_name
 
-        # 1. 完全一致で検索
-        if name in ticker_map:
-            ticker = ticker_map[name]
+        # 1. 完全一致で検索（クリーンな名前同士で比較）
+        match = df[df['clean_name'] == search_name]
         
         # 2. ヒットしない場合、部分一致で検索
-        else:
-            # AIが抜いた名前（例：「トヨタ」）がCSVの社名（例：「トヨタ自動車」）に含まれているか
-            # またはその逆（CSVの社名がAIの抜いた名前に含まれているか）
-            mask = df['name'].str.contains(name, na=False, case=False)
-            matches = df[mask]
+        if match.empty:
+            mask = df['clean_name'].str.contains(search_name, na=False, case=False)
+            match = df[mask]
             
-            if not matches.empty:
-                # 複数の候補がある場合、AIが抜いた名前に「最も文字数が近い」ものを採用（精度の向上）
-                # 例：「日本テレビ」に対して「日本テレビ放送網」と「日本放送協会」があれば、近い方を狙う
-                matches = matches.copy()
-                matches['name_len_diff'] = matches['name'].str.len() - len(name)
-                best_match = matches.sort_values(by='name_len_diff').iloc[0]
-                
-                ticker = best_match['ticker']
-                verified_name = best_match['name']
+        if not match.empty:
+            # 複数の候補がある場合、文字数差が最も小さい（＝余計な言葉がついていない）ものを採用
+            match = match.copy()
+            # abs()で絶対値を取り、最も近いものをソート
+            match['name_len_diff'] = (match['clean_name'].str.len() - len(search_name)).abs()
+            best_match = match.sort_values(by='name_len_diff').iloc[0]
+            
+            ticker = best_match['ticker']
+            # verified_name は CSVの元の名前（スペースあり）を返すと後の表示が綺麗です
+            verified_name = best_match['name']
 
         # 3. ティッカーの整形（4桁数字なら .T を付与）
         final_ticker = "None"
         if ticker:
-            s_ticker = str(ticker)
+            s_ticker = str(ticker).strip()
+            # すでに .T がついている場合や、数字4桁の場合を考慮
             if s_ticker.isdigit() and len(s_ticker) == 4:
                 final_ticker = f"{s_ticker}.T"
+            elif ".T" in s_ticker:
+                final_ticker = s_ticker
             else:
+                # リート(REIT)などで4桁でない場合も想定してそのまま返す
                 final_ticker = s_ticker
 
         verified.append({
