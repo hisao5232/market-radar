@@ -187,9 +187,9 @@ export default function Home() {
                               </div>
                             )}
 
-                            {/* --- チャート表示エリア (位置微調整版) --- */}
+                            {/* --- チャート表示エリア (下方向最大化版) --- */}
                             {isPublic && co.chartHtml && (
-                              <div className="mt-1 overflow-hidden rounded-xl border border-slate-100 bg-white h-[160px]">
+                              <div className="mt-1 overflow-hidden rounded-xl border border-slate-100 bg-white h-[180px]"> {/* 高さを180に拡大 */}
                                 <iframe
                                   srcDoc={`
                                     <html>
@@ -197,14 +197,13 @@ export default function Home() {
                                         <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
                                         <style>
                                           body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
-                                          /* グラフ描画エリア自体の背景を透明化し、少し下にずらす */
-                                          .js-plotly-plot .plotly .main-svg { background: transparent !important; }
+                                          .js-plotly-plot { height: 100vh !important; width: 100vw !important; }
                                         </style>
                                       </head>
                                       <body>
                                         ${co.chartHtml.replace(
                                           '"margin":{', 
-                                          '"margin":{"l":10,"r":10,"t":25,"b":30,' // t(op)を25に増やして、上部に余裕を持たせる
+                                          '"margin":{"l":0,"r":0,"t":20,"b":10,' // 左右0、上20、下10で目一杯広げる
                                         )}
                                       </body>
                                     </html>
