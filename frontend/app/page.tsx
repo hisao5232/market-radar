@@ -194,7 +194,8 @@ export default function Home() {
                                   srcDoc={`
                                     <html>
                                       <head>
-                                        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                                        {/* 最新のv2系を指定して警告を回避 */}
+                                        <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
                                         <style>
                                           body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
                                           .js-plotly-plot { height: 100vh !important; width: 100vw !important; }
