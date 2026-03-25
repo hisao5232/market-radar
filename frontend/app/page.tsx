@@ -10,7 +10,7 @@ interface ImpactedCompany {
   ticker: string;
   reason: string;
   chartHtml?: string;
-  debugInfo?: string; // デバッグ用に追加
+  debugInfo?: string; 
 }
 
 interface Article {
@@ -68,7 +68,6 @@ export default function Home() {
           setMarket(await marketRes.json());
         }
 
-        // --- チャート取得とデバッグ情報の付与 ---
         const updatedArticles = await Promise.all(fetchedArticles.map(async (article) => {
           if (!article.impacted_companies) return article;
 
@@ -85,14 +84,13 @@ export default function Home() {
               }
               
               const chartHtml = await chartRes.text();
-              // 取得したHTMLの文字数をデバッグ情報として入れる
               return { 
                 ...co, 
                 chartHtml, 
-                debugInfo: chartHtml.length > 0 ? `Success (${chartHtml.length} chars)` : "Empty HTML returned" 
+                debugInfo: chartHtml.length > 0 ? `Success (${chartHtml.length} chars)` : "Empty HTML" 
               };
             } catch (err: any) {
-              return { ...co, chartHtml: "", debugInfo: `Fetch Failed: ${err.message}` };
+              return { ...co, chartHtml: "", debugInfo: `Fetch Failed` };
             }
           }));
           return { ...article, impacted_companies: updatedCompanies };
@@ -153,10 +151,6 @@ export default function Home() {
             <div className="p-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400 animate-pulse">
               Initializing neural links...
             </div>
-          ) : articles.length === 0 ? (
-            <div className="p-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400">
-              No signals detected
-            </div>
           ) : (
             articles.map((article) => (
               <article key={article.id} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
@@ -187,19 +181,37 @@ export default function Home() {
                               {co.reason}
                             </p>
 
-                            {/* --- デバッグ用テキスト表示エリア --- */}
                             {isPublic && (
-                              <div className="text-[8px] font-mono text-slate-400 border-t border-slate-100 pt-1 mt-1">
-                                [API_DEBUG]: {co.debugInfo || 'Waiting...'}
+                              <div className="text-[8px] font-mono text-slate-400 border-t border-slate-100 pt-1 mt-1 mb-2">
+                                [API_STATUS]: {co.debugInfo}
                               </div>
                             )}
 
+                            {/* --- チャート表示エリア (iframe方式) --- */}
                             {isPublic && co.chartHtml && (
-                              <div
-                                className="mt-3 overflow-hidden rounded-xl border border-slate-100 bg-white min-h-[120px]"
-                                dangerouslySetInnerHTML={{ __html: co.chartHtml }}
-                              />
+                              <div className="mt-1 overflow-hidden rounded-xl border border-slate-100 bg-white h-[140px]">
+                                <iframe
+                                  srcDoc={`
+                                    <html>
+                                      <head>
+                                        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+                                        <style>
+                                          body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
+                                          .js-plotly-plot { height: 100vh !important; width: 100vw !important; }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        ${co.chartHtml}
+                                      </body>
+                                    </html>
+                                  `}
+                                  title={`${co.name} Chart`}
+                                  className="w-full h-full border-none"
+                                  sandbox="allow-scripts allow-same-origin"
+                                />
+                              </div>
                             )}
+
                             {isPublic && (
                               <a
                                 href={co.ticker.includes('.T')
