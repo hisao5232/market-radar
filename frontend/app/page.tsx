@@ -1,12 +1,15 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Sparkline } from '../components/MarketDashboard';
 
+// --- 型定義 ---
 interface ImpactedCompany {
   name: string;
   ticker: string;
   reason: string;
-  chartHtml?: string; // バックエンドから受け取るHTML文字列
+  chartHtml?: string;
 }
 
 interface Article {
@@ -24,6 +27,7 @@ interface MarketData {
   orukan: { current: number; history: number[] };
 }
 
+// --- ユーティリティ ---
 const formatJST = (dateString: string) => {
   const date = new Date(dateString);
   return new Intl.DateTimeFormat('ja-JP', {
@@ -37,58 +41,66 @@ const formatJST = (dateString: string) => {
   }).format(date).replace(/\//g, '-');
 };
 
-export default async function Home() {
-  const baseUrl = 'https://radar-api.go-pro-world.net';
-  const apiKey = 'hisao_secure_radar_2026';
-  let articles: Article[] = [];
-  let market: MarketData | null = null;
-  let error: string | null = null;
+export default function Home() {
+  // 環境変数 (Cloudflare Pagesの設定画面で登録するもの)
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://radar-api.go-pro-world.net';
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'hisao_secure_radar_2026';
 
-  try {
-    const [articlesRes, marketRes] = await Promise.all([
-      fetch(`${baseUrl}/articles`, {
-        headers: { 'X-API-Key': apiKey },
-        cache: 'no-store',
-      }),
-      fetch(`${baseUrl}/market-summary`, {
-        headers: { 'X-API-Key': apiKey },
-        cache: 'no-store',
-      })
-    ]);
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [market, setMarket] = useState<MarketData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-    if (!articlesRes.ok) throw new Error(`Articles API: ${articlesRes.status}`);
-    articles = await articlesRes.json();
-    if (marketRes.ok) market = await marketRes.json();
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const headers = { 'X-API-Key': apiKey };
 
-    // --- バックエンドで生成されたチャートHTMLを一括取得 ---
-    articles = await Promise.all(articles.map(async (article) => {
-      if (!article.impacted_companies) return article;
+        // 1. 記事とマーケット概要を取得
+        const [articlesRes, marketRes] = await Promise.all([
+          fetch(`${baseUrl}/articles`, { headers }),
+          fetch(`${baseUrl}/market-summary`, { headers })
+        ]);
 
-      const updatedCompanies = await Promise.all(article.impacted_companies.map(async (co) => {
-        const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
-        if (!isPublic) return co;
-
-        try {
-          // 生データではなく、描画済みのHTMLをリクエスト
-          const chartRes = await fetch(`${baseUrl}/stock-chart/${co.ticker}`, {
-            headers: { 'X-API-Key': apiKey },
-            next: { revalidate: 3600 } 
-          });
-          const chartHtml = chartRes.ok ? await chartRes.text() : "";
-          return { ...co, chartHtml };
-        } catch (err) {
-          console.error(`Chart Fetch Error for ${co.ticker}:`, err);
-          return { ...co, chartHtml: "" };
+        if (!articlesRes.ok) throw new Error(`Articles API: ${articlesRes.status}`);
+        let fetchedArticles: Article[] = await articlesRes.json();
+        
+        if (marketRes.ok) {
+          setMarket(await marketRes.json());
         }
-      }));
 
-      return { ...article, impacted_companies: updatedCompanies };
-    }));
+        // 2. 各銘柄のチャートHTMLを個別に取得 (ブラウザ側で実行)
+        const updatedArticles = await Promise.all(fetchedArticles.map(async (article) => {
+          if (!article.impacted_companies) return article;
 
-  } catch (err: any) {
-    console.error("Server Fetch Error:", err);
-    error = err.message;
-  }
+          const updatedCompanies = await Promise.all(article.impacted_companies.map(async (co) => {
+            const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
+            if (!isPublic) return co;
+
+            try {
+              const chartRes = await fetch(`${baseUrl}/stock-chart/${co.ticker}`, { headers });
+              const chartHtml = chartRes.ok ? await chartRes.text() : "";
+              return { ...co, chartHtml };
+            } catch (err) {
+              console.error(`Chart Fetch Error for ${co.ticker}:`, err);
+              return { ...co, chartHtml: "" };
+            }
+          }));
+          return { ...article, impacted_companies: updatedCompanies };
+        }));
+
+        setArticles(updatedArticles);
+      } catch (err: any) {
+        console.error("Client Fetch Error:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [baseUrl, apiKey]);
 
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-12 font-sans text-slate-900">
@@ -101,12 +113,13 @@ export default async function Home() {
               </h1>
               <p className="text-slate-500 font-medium">2026.03 AI-Driven Market Intelligence</p>
             </div>
-            {error && (
-              <div className="bg-red-50 text-red-600 text-[10px] font-mono p-3 rounded-lg border border-red-100">
-                [SYSTEM_ALERT]: {error}
+            {(error || loading) && (
+              <div className={`text-[10px] font-mono p-3 rounded-lg border ${error ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100 animate-pulse'}`}>
+                {error ? `[SYSTEM_ALERT]: ${error}` : '[SCANNING_SIGNALS...]'}
               </div>
             )}
           </div>
+
           {market && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
               {[
@@ -128,7 +141,11 @@ export default async function Home() {
         </header>
 
         <div className="space-y-8">
-          {articles.length === 0 ? (
+          {loading && articles.length === 0 ? (
+            <div className="p-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400 animate-pulse">
+              Initializing neural links...
+            </div>
+          ) : articles.length === 0 ? (
             <div className="p-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400">
               No signals detected
             </div>
@@ -142,10 +159,9 @@ export default async function Home() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
                       {article.impacted_companies.map((co, i) => {
                         const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
-                        const tagClasses = isPublic 
+                        const tagClasses = isPublic
                           ? "bg-blue-50 border-blue-100 group hover:border-blue-400 shadow-sm"
                           : "bg-slate-50 border-slate-100 cursor-default opacity-80";
-                        
                         return (
                           <div key={i} className={`flex flex-col p-4 rounded-2xl border transition-all ${tagClasses}`}>
                             <div className="flex items-center justify-between mb-2">
@@ -159,23 +175,19 @@ export default async function Home() {
                               </div>
                               <span className={`w-2 h-2 rounded-full ${isPublic ? 'bg-blue-400 animate-pulse' : 'bg-slate-300'}`} />
                             </div>
-
                             <p className="text-[10px] text-slate-500 leading-snug mb-3 italic">
                               {co.reason}
                             </p>
-
-                            {/* バックエンドで描画済みのHTMLを安全に埋め込む */}
                             {isPublic && co.chartHtml && (
-                              <div 
+                              <div
                                 className="mt-3 overflow-hidden rounded-xl border border-slate-100 bg-white min-h-[120px]"
-                                dangerouslySetInnerHTML={{ __html: co.chartHtml }} 
+                                dangerouslySetInnerHTML={{ __html: co.chartHtml }}
                               />
                             )}
-                            
                             {isPublic && (
-                              <a 
-                                href={co.ticker.includes('.T') 
-                                  ? `https://finance.yahoo.co.jp/quote/${co.ticker}` 
+                              <a
+                                href={co.ticker.includes('.T')
+                                  ? `https://finance.yahoo.co.jp/quote/${co.ticker}`
                                   : `https://finance.yahoo.com/quote/${co.ticker}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
