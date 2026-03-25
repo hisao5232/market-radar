@@ -27,7 +27,8 @@ app = FastAPI(title="Market Radar API v1.2", lifespan=lifespan)
 
 # サーバー間通信がメインになるためoriginsは現状維持でOK
 origins = [
-    "https://go-pro-world.net",
+    "https://market-radar.pages.dev", # Cloudflareのドメイン
+    "https://go-pro-world.net",       # 独自ドメイン
     "https://www.go-pro-world.net",
     "http://localhost:3000",
 ]
