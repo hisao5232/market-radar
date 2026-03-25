@@ -187,28 +187,31 @@ export default function Home() {
                               </div>
                             )}
 
-                            {/* --- チャート表示エリア (iframe方式) --- */}
+                            {/* --- チャート表示エリア (最終調整版) --- */}
                             {isPublic && co.chartHtml && (
-                              <div className="mt-1 overflow-hidden rounded-xl border border-slate-100 bg-white h-[140px]">
+                              <div className="mt-1 overflow-hidden rounded-xl border border-slate-100 bg-white h-[160px]"> {/* 高さを140→160に微増 */}
                                 <iframe
                                   srcDoc={`
                                     <html>
                                       <head>
-                                        {/* 最新のv2系を指定して警告を回避 */}
                                         <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
                                         <style>
                                           body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
-                                          .js-plotly-plot { height: 100vh !important; width: 100vw !important; }
+                                          /* Plotlyの自動余白を強制的に詰める */
+                                          .js-plotly-plot .plotly .main-svg { background: transparent !important; }
                                         </style>
                                       </head>
                                       <body>
-                                        ${co.chartHtml}
+                                        ${co.chartHtml.replace(
+                                          '"margin":{', 
+                                          '"margin":{"l":0,"r":0,"t":10,"b":20,' // 余白をJavaScriptレベルで強制置換
+                                        )}
                                       </body>
                                     </html>
                                   `}
                                   title={`${co.name} Chart`}
                                   className="w-full h-full border-none"
-                                  sandbox="allow-scripts allow-same-origin"
+                                  sandbox="allow-scripts" // allow-same-originを削除して警告を消去
                                 />
                               </div>
                             )}
