@@ -10,6 +10,7 @@ interface ImpactedCompany {
   ticker: string;
   reason: string;
   chartHtml?: string;
+  debugInfo?: string; // デバッグ用に追加
 }
 
 interface Article {
@@ -27,7 +28,6 @@ interface MarketData {
   orukan: { current: number; history: number[] };
 }
 
-// --- ユーティリティ ---
 const formatJST = (dateString: string) => {
   const date = new Date(dateString);
   return new Intl.DateTimeFormat('ja-JP', {
@@ -42,7 +42,6 @@ const formatJST = (dateString: string) => {
 };
 
 export default function Home() {
-  // 環境変数 (Cloudflare Pagesの設定画面で登録するもの)
   const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://radar-api.go-pro-world.net';
   const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'hisao_secure_radar_2026';
 
@@ -57,20 +56,19 @@ export default function Home() {
         setLoading(true);
         const headers = { 'X-API-Key': apiKey };
 
-        // 1. 記事とマーケット概要を取得
         const [articlesRes, marketRes] = await Promise.all([
           fetch(`${baseUrl}/articles`, { headers }),
           fetch(`${baseUrl}/market-summary`, { headers })
         ]);
 
-        if (!articlesRes.ok) throw new Error(`Articles API: ${articlesRes.status}`);
+        if (!articlesRes.ok) throw new Error(`Articles API Status: ${articlesRes.status}`);
         let fetchedArticles: Article[] = await articlesRes.json();
         
         if (marketRes.ok) {
           setMarket(await marketRes.json());
         }
 
-        // 2. 各銘柄のチャートHTMLを個別に取得 (ブラウザ側で実行)
+        // --- チャート取得とデバッグ情報の付与 ---
         const updatedArticles = await Promise.all(fetchedArticles.map(async (article) => {
           if (!article.impacted_companies) return article;
 
@@ -79,12 +77,22 @@ export default function Home() {
             if (!isPublic) return co;
 
             try {
-              const chartRes = await fetch(`${baseUrl}/stock-chart/${co.ticker}`, { headers });
-              const chartHtml = chartRes.ok ? await chartRes.text() : "";
-              return { ...co, chartHtml };
-            } catch (err) {
-              console.error(`Chart Fetch Error for ${co.ticker}:`, err);
-              return { ...co, chartHtml: "" };
+              const targetUrl = `${baseUrl}/stock-chart/${co.ticker}`;
+              const chartRes = await fetch(targetUrl, { headers });
+              
+              if (!chartRes.ok) {
+                return { ...co, chartHtml: "", debugInfo: `Error: ${chartRes.status}` };
+              }
+              
+              const chartHtml = await chartRes.text();
+              // 取得したHTMLの文字数をデバッグ情報として入れる
+              return { 
+                ...co, 
+                chartHtml, 
+                debugInfo: chartHtml.length > 0 ? `Success (${chartHtml.length} chars)` : "Empty HTML returned" 
+              };
+            } catch (err: any) {
+              return { ...co, chartHtml: "", debugInfo: `Fetch Failed: ${err.message}` };
             }
           }));
           return { ...article, impacted_companies: updatedCompanies };
@@ -178,6 +186,14 @@ export default function Home() {
                             <p className="text-[10px] text-slate-500 leading-snug mb-3 italic">
                               {co.reason}
                             </p>
+
+                            {/* --- デバッグ用テキスト表示エリア --- */}
+                            {isPublic && (
+                              <div className="text-[8px] font-mono text-slate-400 border-t border-slate-100 pt-1 mt-1">
+                                [API_DEBUG]: {co.debugInfo || 'Waiting...'}
+                              </div>
+                            )}
+
                             {isPublic && co.chartHtml && (
                               <div
                                 className="mt-3 overflow-hidden rounded-xl border border-slate-100 bg-white min-h-[120px]"
