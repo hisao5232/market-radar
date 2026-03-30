@@ -54,11 +54,11 @@ export default function Home() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const headers = { 'X-API-Key': apiKey };
-
+        
         const [articlesRes, marketRes] = await Promise.all([
-          fetch(`${baseUrl}/articles`, { headers }),
-          fetch(`${baseUrl}/market-summary`, { headers })
+          fetch(`${baseUrl}/articles?api_key=${apiKey}`),
+          fetch(`${baseUrl}/market-summary?api_key=${apiKey}`)
+      ]);
         ]);
 
         if (!articlesRes.ok) throw new Error(`Articles API Status: ${articlesRes.status}`);
@@ -77,7 +77,7 @@ export default function Home() {
 
             try {
               const targetUrl = `${baseUrl}/stock-chart/${co.ticker}`;
-              const chartRes = await fetch(targetUrl, { headers });
+              const chartRes = await fetch(`${targetUrl}?api_key=${apiKey}`);
               
               if (!chartRes.ok) {
                 return { ...co, chartHtml: "", debugInfo: `Error: ${chartRes.status}` };
