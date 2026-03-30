@@ -58,7 +58,6 @@ export default function Home() {
         const [articlesRes, marketRes] = await Promise.all([
           fetch(`${baseUrl}/articles?api_key=${apiKey}`),
           fetch(`${baseUrl}/market-summary?api_key=${apiKey}`)
-      ]);
         ]);
 
         if (!articlesRes.ok) throw new Error(`Articles API Status: ${articlesRes.status}`);
