@@ -49,26 +49,20 @@ export default function Home() {
   const [market, setMarket] = useState<MarketData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [debug, setDebug] = useState<string>("");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true);
-        
+        const headers = { 'X-API-Key': apiKey };
+
         const [articlesRes, marketRes] = await Promise.all([
-          fetch(`${baseUrl}/articles?api_key=${apiKey}`),
-          fetch(`${baseUrl}/market-summary?api_key=${apiKey}`)
+          fetch(`${baseUrl}/articles`, { headers }),
+          fetch(`${baseUrl}/market-summary`, { headers })
         ]);
 
         if (!articlesRes.ok) throw new Error(`Articles API Status: ${articlesRes.status}`);
         let fetchedArticles: Article[] = await articlesRes.json();
-        setDebug(
-          `API OK
-        articles length: ${fetchedArticles.length}
-        baseUrl: ${baseUrl}
-        apiKey: ${apiKey}`
-        );
         
         if (marketRes.ok) {
           setMarket(await marketRes.json());
@@ -83,7 +77,7 @@ export default function Home() {
 
             try {
               const targetUrl = `${baseUrl}/stock-chart/${co.ticker}`;
-              const chartRes = await fetch(`${targetUrl}?api_key=${apiKey}`);
+              const chartRes = await fetch(targetUrl, { headers });
               
               if (!chartRes.ok) {
                 return { ...co, chartHtml: "", debugInfo: `Error: ${chartRes.status}` };
@@ -151,11 +145,6 @@ export default function Home() {
             </div>
           )}
         </header>
-        {debug && (
-          <div className="bg-black text-green-400 text-xs p-3 mt-4 rounded font-mono whitespace-pre-wrap">
-            {debug}
-          </div>
-        )}
 
         <div className="space-y-8">
           {loading && articles.length === 0 ? (

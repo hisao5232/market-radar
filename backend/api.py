@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, Header, Request, Query
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette import status
@@ -8,23 +8,27 @@ import db
 import yfinance as yf
 import plotly.graph_objects as go
 
-# --- lifespan (起動時処理) ---
+# --- lifespan (起動時処理) の定義 ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # アプリ起動時に実行される処理
     print("Initializing database...")
     try:
-        db.init_db()
+        db.init_db() # ここでテーブル作成を実行
         print("Database initialized successfully.")
     except Exception as e:
         print(f"Failed to initialize database: {e}")
+    
     yield
+    # アプリ終了時に実行したい処理があればここに記述（今回は不要）
 
-app = FastAPI(title="Market Radar API v1.3", lifespan=lifespan)
+# FastAPIの引数に lifespan を追加
+app = FastAPI(title="Market Radar API v1.2", lifespan=lifespan)
 
-# --- CORS設定 (Cloudflare Pages対応強化) ---
+# サーバー間通信がメインになるためoriginsは現状維持でOK
 origins = [
-    "https://market-radar.pages.dev",
-    "https://go-pro-world.net",
+    "https://market-radar.pages.dev", # Cloudflareのドメイン
+    "https://go-pro-world.net",       # 独自ドメイン
     "https://www.go-pro-world.net",
     "http://localhost:3000",
 ]
@@ -32,30 +36,17 @@ origins = [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.pages\.dev", # プレビューURLも許可
+    allow_origin_regex=r"https://.*\.pages\.dev",
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"], # X-API-Keyなどのカスタムヘッダーを許可
+    allow_headers=["*"],
 )
 
 API_KEY = os.getenv("API_KEY", "hisao_secure_radar_2026")
 
-# --- 認証ロジック ---
-from fastapi import Query
-
-def get_api_key(
-    request: Request,
-    x_api_key: str = Header(None),
-    api_key: str = Query(None)
-):
-    key = x_api_key or api_key
-
-    if request.method == "OPTIONS":
-        return None
-
-    if key == API_KEY:
-        return key
-
+def get_api_key(x_api_key: str = Header(None)):
+    if x_api_key == API_KEY:
+        return x_api_key
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Invalid API Key"
@@ -63,7 +54,7 @@ def get_api_key(
 
 @app.get("/")
 def read_root():
-    return {"status": "Market Radar API v1.3 is online"}
+    return {"status": "Market Radar API v1.2 is online"}
 
 @app.get("/articles")
 def get_articles(limit: int = None, api_key: str = Depends(get_api_key)):
@@ -91,29 +82,36 @@ def get_market_summary(api_key: str = Depends(get_api_key)):
             summary[key] = {"current": None, "history": []}
     return summary
 
+# 旧 stock-history を削除し、HTMLを返す stock-chart に差し替え
 @app.get("/stock-chart/{ticker}", response_class=HTMLResponse)
-def get_stock_chart(request: Request, ticker: str, x_api_key: str = Header(None)):
-    # 個別に認証チェック (OPTIONS時はスキップ)
-    if request.method != "OPTIONS" and x_api_key != API_KEY:
+def get_stock_chart(ticker: str, x_api_key: str = Header(None)):
+    """
+    Plotlyを使用してローソク足チャートを生成し、HTMLを返す
+    """
+    if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API Key")
-    
+
     try:
         stock = yf.Ticker(ticker)
+        # 直近10営業日分取得して密度を高める
         hist = stock.history(period="1mo").tail(10)
+        
         if hist.empty:
             return "<p style='color:gray; font-size:10px;'>No data</p>"
 
+        # Plotly ローソク足の設定
         fig = go.Figure(data=[go.Candlestick(
             x=hist.index.strftime('%m/%d'),
             open=hist['Open'],
             high=hist['High'],
             low=hist['Low'],
             close=hist['Close'],
-            increasing_line_color='#10b981',
-            decreasing_line_color='#ef4444',
+            increasing_line_color='#10b981', # 上昇: 緑
+            decreasing_line_color='#ef4444', # 下落: 赤
             whiskerwidth=0.5
         )])
 
+        # UIデザイン調整: ミニマル・ダーク/ライト対応
         fig.update_layout(
             margin=dict(l=0, r=0, t=0, b=0),
             height=120,
@@ -124,13 +122,15 @@ def get_stock_chart(request: Request, ticker: str, x_api_key: str = Header(None)
             xaxis=dict(showgrid=False, tickfont=dict(size=8, color='#94a3b8')),
             yaxis=dict(showgrid=True, gridcolor='#f1f5f9', side='right', tickfont=dict(size=8, color='#94a3b8'))
         )
-
+        
+        # HTML文字列として出力 (CDN利用で軽量化、ツールバー非表示)
         chart_html = fig.to_html(
-            full_html=False,
-            include_plotlyjs='cdn',
+            full_html=False, 
+            include_plotlyjs='cdn', 
             config={'displayModeBar': False, 'responsive': True}
         )
         return chart_html
+
     except Exception as e:
         print(f"Chart Error for {ticker}: {e}")
         return f"<p style='color:red; font-size:10px;'>Chart Error</p>"
