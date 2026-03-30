@@ -4,13 +4,12 @@ import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Sparkline } from '../components/MarketDashboard';
 
-// --- 型定義 ---
 interface ImpactedCompany {
   name: string;
   ticker: string;
   reason: string;
   chartHtml?: string;
-  debugInfo?: string; 
+  debugInfo?: string;
 }
 
 interface Article {
@@ -42,8 +41,14 @@ const formatJST = (dateString: string) => {
 };
 
 export default function Home() {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://radar-api.go-pro-world.net';
-  const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'hisao_secure_radar_2026';
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_API_URL ||
+    'https://radar-api.go-pro-world.net';
+
+  const apiKey =
+    process.env.NEXT_PUBLIC_API_KEY ||
+    'hisao_secure_radar_2026';
 
   const [articles, setArticles] = useState<Article[]>([]);
   const [market, setMarket] = useState<MarketData | null>(null);
@@ -52,229 +57,295 @@ export default function Home() {
   const [debug, setDebug] = useState<string>("");
 
   useEffect(() => {
+
+    const fetchWithTimeout = async (url: string, timeout = 8000) => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(id);
+      return res;
+    };
+
     const fetchData = async () => {
+
       try {
+
         setLoading(true);
-        
+
+        /* ---------- 基本データ取得 ---------- */
+
         const [articlesRes, marketRes] = await Promise.all([
-          fetch(`${baseUrl}/articles?api_key=${apiKey}`),
-          fetch(`${baseUrl}/market-summary?api_key=${apiKey}`)
+          fetchWithTimeout(`${baseUrl}/articles?limit=20&api_key=${apiKey}`),
+          fetchWithTimeout(`${baseUrl}/market-summary?api_key=${apiKey}`)
         ]);
 
-        if (!articlesRes.ok) throw new Error(`Articles API Status: ${articlesRes.status}`);
-        let fetchedArticles: Article[] = await articlesRes.json();
-        setDebug(
-          `API OK
-        articles length: ${fetchedArticles.length}
-        baseUrl: ${baseUrl}
-        apiKey: ${apiKey}`
-        );
-        
+        if (!articlesRes.ok)
+          throw new Error(`Articles API Status: ${articlesRes.status}`);
+
+        const fetchedArticles: Article[] = await articlesRes.json();
+
         if (marketRes.ok) {
-          setMarket(await marketRes.json());
+          const marketData = await marketRes.json();
+          setMarket(marketData);
         }
 
-        const updatedArticles = await Promise.all(fetchedArticles.map(async (article) => {
-          if (!article.impacted_companies) return article;
+        setDebug(`
+API OK
+articles: ${fetchedArticles.length}
+baseUrl: ${baseUrl}
+apiKey: ${apiKey}
+`);
 
-          const updatedCompanies = await Promise.all(article.impacted_companies.map(async (co) => {
-            const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
-            if (!isPublic) return co;
+        /* ---------- chart API負荷制限 ---------- */
 
-            try {
-              const targetUrl = `${baseUrl}/stock-chart/${co.ticker}`;
-              const chartRes = await fetch(`${targetUrl}?api_key=${apiKey}`);
-              
-              if (!chartRes.ok) {
-                return { ...co, chartHtml: "", debugInfo: `Error: ${chartRes.status}` };
-              }
-              
-              const chartHtml = await chartRes.text();
-              return { 
-                ...co, 
-                chartHtml, 
-                debugInfo: chartHtml.length > 0 ? `Success (${chartHtml.length} chars)` : "Empty HTML" 
-              };
-            } catch (err: any) {
-              return { ...co, chartHtml: "", debugInfo: `Fetch Failed` };
-            }
-          }));
-          return { ...article, impacted_companies: updatedCompanies };
-        }));
+        const limitedArticles = fetchedArticles.slice(0, 8);
+
+        const updatedArticles = await Promise.all(
+
+          limitedArticles.map(async (article) => {
+
+            if (!article.impacted_companies)
+              return article;
+
+            const updatedCompanies = await Promise.all(
+
+              article.impacted_companies.map(async (co) => {
+
+                const isPublic =
+                  co.ticker &&
+                  co.ticker.toLowerCase() !== 'none';
+
+                if (!isPublic)
+                  return co;
+
+                try {
+
+                  const chartRes = await fetchWithTimeout(
+                    `${baseUrl}/stock-chart/${co.ticker}?api_key=${apiKey}`
+                  );
+
+                  if (!chartRes.ok) {
+
+                    return {
+                      ...co,
+                      chartHtml: "",
+                      debugInfo: `HTTP ${chartRes.status}`
+                    };
+
+                  }
+
+                  const chartHtml = await chartRes.text();
+
+                  return {
+                    ...co,
+                    chartHtml,
+                    debugInfo: `OK ${chartHtml.length}`
+                  };
+
+                } catch {
+
+                  return {
+                    ...co,
+                    chartHtml: "",
+                    debugInfo: "fetch failed"
+                  };
+
+                }
+
+              })
+
+            );
+
+            return {
+              ...article,
+              impacted_companies: updatedCompanies
+            };
+
+          })
+
+        );
 
         setArticles(updatedArticles);
+
       } catch (err: any) {
-        console.error("Client Fetch Error:", err);
+
         setError(err.message);
+
+        setDebug(`
+FETCH ERROR
+${err.message}
+baseUrl: ${baseUrl}
+`);
+
       } finally {
+
         setLoading(false);
+
       }
+
     };
 
     fetchData();
+
   }, [baseUrl, apiKey]);
 
   return (
     <main className="min-h-screen bg-slate-50 p-6 md:p-12 font-sans text-slate-900">
+
       <div className="max-w-4xl mx-auto">
+
+        {/* ---------- HEADER ---------- */}
+
         <header className="mb-12 border-b-2 border-slate-200 pb-8">
+
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+
             <div>
-              <h1 className="text-4xl font-black text-slate-900 mb-2 tracking-tighter italic">
-                MARKET RADAR <span className="text-blue-600 not-italic">v1.3</span>
+              <h1 className="text-4xl font-black tracking-tighter italic">
+                MARKET RADAR
+                <span className="text-blue-600 not-italic"> v1.3</span>
               </h1>
-              <p className="text-slate-500 font-medium">2026.03 AI-Driven Market Intelligence</p>
+
+              <p className="text-slate-500 font-medium">
+                2026 AI-Driven Market Intelligence
+              </p>
             </div>
+
             {(error || loading) && (
-              <div className={`text-[10px] font-mono p-3 rounded-lg border ${error ? 'bg-red-50 text-red-600 border-red-100' : 'bg-blue-50 text-blue-600 border-blue-100 animate-pulse'}`}>
-                {error ? `[SYSTEM_ALERT]: ${error}` : '[SCANNING_SIGNALS...]'}
+              <div
+                className={`text-[10px] font-mono p-3 rounded-lg border
+                ${error
+                    ? 'bg-red-50 text-red-600'
+                    : 'bg-blue-50 text-blue-600 animate-pulse'
+                  }`}
+              >
+                {error
+                  ? `[SYSTEM_ALERT]: ${error}`
+                  : '[SCANNING_MARKETS...]'}
               </div>
             )}
+
           </div>
 
+          {/* ---------- MARKET ---------- */}
+
           {market && (
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+
               {[
-                { label: "日経平均株価", data: market.nikkei, unit: "円" },
-                { label: "米ドル / 円", data: market.usdjpy, unit: "円", fixed: 2 },
-                { label: "オルカン (2559.T)", data: market.orukan, unit: "円" }
+                { label: "日経平均", data: market.nikkei, unit: "円" },
+                { label: "USD/JPY", data: market.usdjpy, unit: "円", fixed: 2 },
+                { label: "オルカン", data: market.orukan, unit: "円" }
               ].map((item, idx) => (
-                <div key={idx} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 hover:border-blue-400 transition-colors">
-                  <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-widest">{item.label}</p>
-                  <p className="text-2xl font-black">
-                    {item.data?.current ? (item.fixed ? item.data.current.toFixed(item.fixed) : item.data.current.toLocaleString()) : "---"}
-                    <span className="text-sm font-normal text-slate-300 ml-1">{item.unit}</span>
+
+                <div
+                  key={idx}
+                  className="bg-white p-5 rounded-2xl shadow-sm border"
+                >
+
+                  <p className="text-[10px] text-slate-400 mb-1 uppercase">
+                    {item.label}
                   </p>
+
+                  <p className="text-2xl font-black">
+
+                    {item.data?.current
+                      ? (item.fixed
+                        ? item.data.current.toFixed(item.fixed)
+                        : item.data.current.toLocaleString())
+                      : "---"}
+
+                    <span className="text-sm text-slate-300 ml-1">
+                      {item.unit}
+                    </span>
+
+                  </p>
+
                   <Sparkline data={item.data?.history || []} />
+
                 </div>
+
               ))}
+
             </div>
+
           )}
+
         </header>
+
+        {/* ---------- DEBUG ---------- */}
+
         {debug && (
-          <div className="bg-black text-green-400 text-xs p-3 mt-4 rounded font-mono whitespace-pre-wrap">
+          <div className="bg-black text-green-400 text-xs p-3 rounded font-mono whitespace-pre-wrap mb-6">
             {debug}
           </div>
         )}
 
+        {/* ---------- ARTICLES ---------- */}
+
         <div className="space-y-8">
-          {loading && articles.length === 0 ? (
-            <div className="p-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400 animate-pulse">
-              Initializing neural links...
-            </div>
-          ) : (
-            articles.map((article) => (
-              <article key={article.id} className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow">
-                <div className="p-8">
-                  <h2 className="text-2xl font-black mb-6 leading-tight tracking-tight text-slate-800">{article.title}</h2>
-                  
-                  {article.impacted_companies && article.impacted_companies.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
-                      {article.impacted_companies.map((co, i) => {
-                        const isPublic = co.ticker && co.ticker.toLowerCase() !== 'none';
-                        const tagClasses = isPublic
-                          ? "bg-blue-50 border-blue-100 group hover:border-blue-400 shadow-sm"
-                          : "bg-slate-50 border-slate-100 cursor-default opacity-80";
-                        return (
-                          <div key={i} className={`flex flex-col p-4 rounded-2xl border transition-all ${tagClasses}`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className={`font-mono text-[10px] font-black uppercase tracking-tighter ${isPublic ? 'text-blue-600' : 'text-slate-400'}`}>
-                                  {isPublic ? co.ticker : 'PRIVATE'}
-                                </span>
-                                <span className={`font-bold text-xs ${isPublic ? 'text-slate-800' : 'text-slate-500'}`}>
-                                  {co.name}
-                                </span>
-                              </div>
-                              <span className={`w-2 h-2 rounded-full ${isPublic ? 'bg-blue-400 animate-pulse' : 'bg-slate-300'}`} />
-                            </div>
-                            <p className="text-[10px] text-slate-500 leading-snug mb-3 italic">
-                              {co.reason}
-                            </p>
 
-                            {isPublic && (
-                              <div className="text-[8px] font-mono text-slate-400 border-t border-slate-100 pt-1 mt-1 mb-2">
-                                [API_STATUS]: {co.debugInfo}
-                              </div>
-                            )}
+          {articles.map((article) => (
 
-                            {/* --- チャート表示エリア (下方向最大化版) --- */}
-                            {isPublic && co.chartHtml && (
-                              <div className="mt-1 overflow-hidden rounded-xl border border-slate-100 bg-white h-[180px]"> {/* 高さを180に拡大 */}
-                                <iframe
-                                  srcDoc={`
-                                    <html>
-                                      <head>
-                                        <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-                                        <style>
-                                          body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
-                                          .js-plotly-plot { height: 100vh !important; width: 100vw !important; }
-                                        </style>
-                                      </head>
-                                      <body>
-                                        ${co.chartHtml.replace(
-                                          '"margin":{', 
-                                          '"margin":{"l":0,"r":0,"t":20,"b":10,' // 左右0、上20、下10で目一杯広げる
-                                        )}
-                                      </body>
-                                    </html>
-                                  `}
-                                  title={`${co.name} Chart`}
-                                  className="w-full h-full border-none"
-                                  sandbox="allow-scripts" 
-                                />
-                              </div>
-                            )}
+            <article
+              key={article.id}
+              className="bg-white rounded-3xl shadow-sm border"
+            >
 
-                            {isPublic && (
-                              <a
-                                href={co.ticker.includes('.T')
-                                  ? `https://finance.yahoo.co.jp/quote/${co.ticker}`
-                                  : `https://finance.yahoo.com/quote/${co.ticker}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="mt-2 text-right text-[9px] font-black text-blue-500 hover:text-blue-700 uppercase tracking-widest"
-                              >
-                                View Details →
-                              </a>
-                            )}
-                          </div>
-                        );
-                      })}
+              <div className="p-8">
+
+                <h2 className="text-2xl font-black mb-6">
+                  {article.title}
+                </h2>
+
+                {article.impacted_companies?.map((co, i) => (
+
+                  <div key={i} className="mb-4 border rounded-xl p-4">
+
+                    <div className="text-xs font-bold mb-1">
+                      {co.ticker}
                     </div>
-                  )}
 
-                  <div className="flex flex-wrap items-center gap-4 mb-8 pt-4 border-t border-slate-50">
-                    {article.url && (
-                      <a href={article.url} target="_blank" rel="noopener noreferrer"
-                         className="bg-slate-900 text-white px-5 py-2 rounded-xl text-[10px] font-black tracking-widest hover:bg-blue-600 transition-colors shadow-sm">
-                        READ SOURCE
-                      </a>
+                    <div className="text-xs text-slate-500 mb-2">
+                      {co.reason}
+                    </div>
+
+                    {co.debugInfo && (
+                      <div className="text-[10px] font-mono text-slate-400">
+                        API: {co.debugInfo}
+                      </div>
                     )}
-                    <div className="flex items-center gap-2 text-slate-400 text-[10px] font-bold">
-                      <span className="opacity-50 tracking-tighter uppercase">Received:</span>
-                      <span className="font-mono bg-slate-100 px-2 py-1 rounded text-slate-500">
-                        {formatJST(article.created_at)}
-                      </span>
-                    </div>
+
+                    {co.chartHtml && (
+
+                      <iframe
+                        srcDoc={co.chartHtml}
+                        className="w-full h-[180px] border-none"
+                        sandbox="allow-scripts"
+                      />
+
+                    )}
+
                   </div>
 
-                  <div className="bg-slate-50/80 rounded-2xl p-6 md:p-8 border border-slate-100">
-                    <div className="prose prose-slate max-w-none text-slate-600 text-sm leading-relaxed prose-strong:text-blue-700 prose-strong:font-black">
-                      <ReactMarkdown>{article.analysis}</ReactMarkdown>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))
-          )}
+                ))}
+
+                <ReactMarkdown>
+                  {article.analysis}
+                </ReactMarkdown>
+
+              </div>
+
+            </article>
+
+          ))}
+
         </div>
 
-        <footer className="mt-20 text-center pb-12 border-t border-slate-200 pt-12">
-          <p className="text-slate-300 text-[10px] font-bold tracking-[0.5em] uppercase mb-4">Global Pro Maintenance Protocol</p>
-          <p className="text-slate-400 text-xs italic">&copy; 2026 Hisao. Market Radar v1.3.</p>
-        </footer>
       </div>
+
     </main>
   );
 }
