@@ -30,15 +30,17 @@ origins = [
     "https://market-radar.pages.dev", # Cloudflareのドメイン
     "https://go-pro-world.net",       # 独自ドメイン
     "https://www.go-pro-world.net",
+    "https://market-radar.go-pro-world.net",
     "http://localhost:3000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.pages\.dev",
+    # go-pro-world.net の全サブドメイン と Cloudflare Pages の全ドメインを許可
+    allow_origin_regex=r"https://.*\.go-pro-world\.net|https://.*\.pages\.dev",
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["*", "OPTIONS"], # OPTIONSを明示的に許可
     allow_headers=["*"],
 )
 
