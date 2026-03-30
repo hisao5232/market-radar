@@ -49,6 +49,7 @@ export default function Home() {
   const [market, setMarket] = useState<MarketData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [debug, setDebug] = useState<string>("");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -62,6 +63,12 @@ export default function Home() {
 
         if (!articlesRes.ok) throw new Error(`Articles API Status: ${articlesRes.status}`);
         let fetchedArticles: Article[] = await articlesRes.json();
+        setDebug(
+          `API OK
+        articles length: ${fetchedArticles.length}
+        baseUrl: ${baseUrl}
+        apiKey: ${apiKey}`
+        );
         
         if (marketRes.ok) {
           setMarket(await marketRes.json());
@@ -144,6 +151,11 @@ export default function Home() {
             </div>
           )}
         </header>
+        {debug && (
+          <div className="bg-black text-green-400 text-xs p-3 mt-4 rounded font-mono whitespace-pre-wrap">
+            {debug}
+          </div>
+        )}
 
         <div className="space-y-8">
           {loading && articles.length === 0 ? (
