@@ -42,8 +42,8 @@ const formatJST = (dateString: string) => {
 };
 
 export default function Home() {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'https://radar-api.go-pro-world.net';
-  const apiKey = process.env.NEXT_PUBLIC_API_KEY || 'hisao_secure_radar_2026';
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+  const apiKey = process.env.NEXT_PUBLIC_API_KEY || '';
 
   const [articles, setArticles] = useState<Article[]>([]);
   const [market, setMarket] = useState<MarketData | null>(null);

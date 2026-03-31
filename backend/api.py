@@ -44,14 +44,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-API_KEY = os.getenv("API_KEY", "hisao_secure_radar_2026")
+API_KEY = os.getenv("API_KEY")
 
 def get_api_key(x_api_key: str = Header(None)):
-    if x_api_key == API_KEY:
+    # API_KEYが設定されていない、または一致しない場合は拒否
+    if API_KEY and x_api_key == API_KEY:
         return x_api_key
+    
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Invalid API Key"
+        detail="Invalid or Missing API Key"
     )
 
 @app.get("/")
@@ -59,8 +61,12 @@ def read_root():
     return {"status": "Market Radar API v1.2 is online"}
 
 @app.get("/articles")
-def get_articles(limit: int = None, api_key: str = Depends(get_api_key)):
+def get_articles(limit: int = 50, api_key: str = Depends(get_api_key)):
+    """
+    最新の記事を取得する（デフォルト50件）
+    """
     try:
+        # DB操作関数にlimitを渡す
         articles = db.get_latest_articles(limit)
         return articles if articles is not None else []
     except Exception as e:
