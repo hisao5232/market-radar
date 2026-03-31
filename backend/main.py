@@ -10,50 +10,41 @@ import db
 
 # --- 銘柄照合用の関数 ---
 def get_verified_companies(raw_companies):
-    """
-    AIが抽出した企業名リストをCSVと照合して正確なティッカーを付与する。
-    CSV側の名称に含まれる不要なスペースを無視してマッチングを行う。
-    """
     csv_path = os.path.join(os.path.dirname(__file__), "stock_list.csv")
     if not os.path.exists(csv_path):
         return raw_companies
 
-    # CSV読み込み
     df = pd.read_csv(csv_path)
-    
-    # --- スペース対策の事前準備 ---
-    # CSV側の名称から全角・半角スペースをすべて除去した比較用の列を作成
-    df['clean_name'] = df['name'].str.replace(r'\s+', '', regex=True)
-    
+
+    # --- ここを強化：全角・半角スペースを完全に除去 ---
+    # CSV側の「第 一 生 命」を「第一生命」に変換して比較用にする
+    df['clean_name'] = df['name'].str.replace(r'[\s　]+', '', regex=True)
+
     verified = []
     for co in raw_companies:
         raw_name = co.get("name", "").strip()
-        if not raw_name:
-            continue
-            
-        # 検索キーワードからもスペースを除去
-        search_name = raw_name.replace(" ", "").replace("　", "")
-        
+        if not raw_name: continue
+
+        # AIが出した名前からも全角・半角スペースを除去
+        import re
+        search_name = re.sub(r'[\s　]+', '', raw_name)
+
         ticker = None
         verified_name = raw_name
 
-        # 1. 完全一致で検索（クリーンな名前同士で比較）
+        # 1. 完全一致（スペースなし同士）
         match = df[df['clean_name'] == search_name]
-        
-        # 2. ヒットしない場合、部分一致で検索
+
+        # 2. ヒットしない場合、部分一致
         if match.empty:
             mask = df['clean_name'].str.contains(search_name, na=False, case=False)
             match = df[mask]
-            
+
         if not match.empty:
-            # 複数の候補がある場合、文字数差が最も小さい（＝余計な言葉がついていない）ものを採用
             match = match.copy()
-            # abs()で絶対値を取り、最も近いものをソート
             match['name_len_diff'] = (match['clean_name'].str.len() - len(search_name)).abs()
             best_match = match.sort_values(by='name_len_diff').iloc[0]
-            
             ticker = best_match['ticker']
-            # verified_name は CSVの元の名前（スペースあり）を返すと後の表示が綺麗です
             verified_name = best_match['name']
 
         # 3. ティッカーの整形（4桁数字なら .T を付与）
@@ -80,7 +71,6 @@ def get_verified_companies(raw_companies):
 def analyze_with_groq(title, text):
     client = Groq(api_key=os.getenv("GROQ_API_KEY"))
     
-    # プロンプトを「企業名の抽出」に集中させるよう修正
     prompt = f"""
 あなたは日本株専門の証券アナリストです。
 提供されたニュースを読み、日本の株式市場への影響を客観的に評価してください。
@@ -93,20 +83,19 @@ def analyze_with_groq(title, text):
 1. AI分析スコア (score): 0〜100で評価。
 2. 要約・影響 (analysis): 
    - ニュースの本質と市場への影響を2〜3文の「自然な日本語」で記述。
-   - 創作した専門用語や、不自然な漢字変換（例：放引、府徳など）は絶対に使用禁止。
 3. 関連企業 (companies): 
    - 記事に登場、または直接関連する「日本企業」を最大3社。
-   - name: 「株式会社」などを除いた正式な社名（例：トヨタ自動車、LayerX）。
+   - name: 「株式会社」などを除いた正式な社名。
+   - ticker: 4桁の証券コード（例: 8750.T）。不明なら "none"。
    - reason: 影響の理由を1文で。
 
 【出力形式】
 必ず有効なJSONのみ出力してください。
-
 {{
  "score": 0,
- "analysis": "ここに自然な日本語で分析を記述",
+ "analysis": "...",
  "companies":[
-   {{"name": "企業名", "reason": "理由を記述"}}
+   {{"name": "企業名", "ticker": "8750.T または none", "reason": "..."}}
  ]
 }}
 """
@@ -126,7 +115,7 @@ def analyze_with_groq(title, text):
         return None
 
 def main():
-    # 起動時のDBリセットは運用に合わせて調整（毎回消したくない場合はコメントアウト）
+    # 起動時のDBリセット設定
     # db.init_db() 
     
     with open(os.path.join(os.path.dirname(__file__), "keywords.txt"), 'r') as f:
@@ -149,20 +138,38 @@ def main():
                 result = analyze_with_groq(title, body.get_text())
                 
                 if result:
-                    # --- 【重要】Python側でティッカーを確定させる ---
                     raw_companies = result.get("companies", [])
-                    verified_companies = get_verified_companies(raw_companies)
+                    verified_companies = []
+
+                    for co in raw_companies:
+                        ticker = co.get("ticker", "none")
+                        
+                        # --- ハイブリッド照合ロジック ---
+                        # 1. AIが有効なティッカー（xxxx.T）を返してきた場合
+                        if ticker and ticker.lower() != "none":
+                            print(f"DEBUG: AIにより特定 -> {co['name']} ({ticker})")
+                            verified_companies.append(co)
+                        
+                        # 2. AIが特定できなかった(none)場合、CSVから補完を試みる
+                        else:
+                            print(f"DEBUG: AI未特定のためCSV照合開始 -> {co['name']}")
+                            # get_verified_companies はリストを受け取る仕様なので [co] で渡す
+                            v_list = get_verified_companies([co])
+                            if v_list and v_list[0].get("ticker") != "None":
+                                print(f"DEBUG: CSVにより補完成功 -> {v_list[0]['name']} ({v_list[0]['ticker']})")
+                                verified_companies.append(v_list[0])
+                            else:
+                                # CSVでもダメなら、そのまま（ticker="None"）追加
+                                verified_companies.append(v_list[0] if v_list else co)
                     
-                    # ★ ここに確認用のログを追加
-                    print(f"DEBUG: 照合結果 -> {json.dumps(verified_companies, ensure_ascii=False, indent=2)}")
-                    
+                    # 最終的な保存処理
                     db.save_article(
                         link, 
                         title, 
                         result.get("analysis", ""), 
-                        verified_companies # 照合済みのリストを渡す
+                        verified_companies 
                     )
-                    print(f"分析完了: {len(verified_companies)}社特定")
+                    print(f"分析完了: {len(verified_companies)}社特定済")
                 
                 time.sleep(2)
             except Exception as e:
