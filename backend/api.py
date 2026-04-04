@@ -7,6 +7,8 @@ import os
 import db
 import yfinance as yf
 import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
 
 # --- lifespan (起動時処理) の定義 ---
 @asynccontextmanager
@@ -75,70 +77,110 @@ def get_articles(limit: int = 50, api_key: str = Depends(get_api_key)):
 
 @app.get("/market-summary")
 def get_market_summary(api_key: str = Depends(get_api_key)):
+    """
+    日経平均、ドル円、オルカンのサマリーを取得。
+    JSON compliantにするため、NaN(非数)を厳格に排除。
+    """
     tickers = {"nikkei": "^N225", "usdjpy": "JPY=X", "orukan": "2559.T"}
     summary = {}
+    
     for key, symbol in tickers.items():
         try:
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="1mo")
+            
             if not hist.empty:
-                last_7_days = hist['Close'].tail(7).round(2).tolist()
-                summary[key] = {"current": last_7_days[-1], "history": last_7_days}
+                # 終値を取得し、小数点2桁で丸める
+                series = hist['Close'].tail(7).round(2)
+                
+                # 【重要】NaNをNone(JSONのnull)に置換する絶縁処理
+                # list型に変換する際、pd.isna()で判定してNoneを入れます
+                last_7_days = [
+                    val if not pd.isna(val) else None 
+                    for val in series.tolist()
+                ]
+                
+                # 現在値（リストの最後）を取得
+                current_val = last_7_days[-1] if last_7_days else None
+                
+                summary[key] = {
+                    "current": current_val, 
+                    "history": last_7_days
+                }
             else:
                 summary[key] = {"current": None, "history": []}
+                
         except Exception as e:
+            print(f"Error fetching {symbol}: {e}")
             summary[key] = {"current": None, "history": []}
+            
     return summary
 
-# 旧 stock-history を削除し、HTMLを返す stock-chart に差し替え
 @app.get("/stock-chart/{ticker}", response_class=HTMLResponse)
 def get_stock_chart(ticker: str, x_api_key: str = Header(None)):
     """
-    Plotlyを使用してローソク足チャートを生成し、HTMLを返す
+    Plotlyを使用してローソク足チャートを生成。
+    HTMLとして返すため、NaNがあってもPlotly側で処理されるが、
+    念のためデータクレンジングを行う。
     """
     if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API Key")
-
+        
     try:
         stock = yf.Ticker(ticker)
-        # 直近10営業日分取得して密度を高める
+        # 直近10営業日分取得
         hist = stock.history(period="1mo").tail(10)
         
         if hist.empty:
-            return "<p style='color:gray; font-size:10px;'>No data</p>"
+            return "<p style='color:gray; font-size:10px; text-align:center;'>No data</p>"
 
-        # Plotly ローソク足の設定
+        # ローソク足チャートの生成
         fig = go.Figure(data=[go.Candlestick(
             x=hist.index.strftime('%m/%d'),
             open=hist['Open'],
             high=hist['High'],
             low=hist['Low'],
             close=hist['Close'],
-            increasing_line_color='#10b981', # 上昇: 緑
-            decreasing_line_color='#ef4444', # 下落: 赤
+            increasing_line_color='#10b981', # 上昇: 緑 (Tailwind blue-500相当)
+            decreasing_line_color='#ef4444', # 下落: 赤 (Tailwind red-500相当)
             whiskerwidth=0.5
         )])
 
-        # UIデザイン調整: ミニマル・ダーク/ライト対応
+        # ミニマルなデザイン調整
         fig.update_layout(
-            margin=dict(l=0, r=0, t=0, b=0),
+            margin=dict(l=0, r=0, t=20, b=10), # 余白を詰める
             height=120,
             xaxis_rangeslider_visible=False,
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
             showlegend=False,
-            xaxis=dict(showgrid=False, tickfont=dict(size=8, color='#94a3b8')),
-            yaxis=dict(showgrid=True, gridcolor='#f1f5f9', side='right', tickfont=dict(size=8, color='#94a3b8'))
+            xaxis=dict(
+                showgrid=False, 
+                tickfont=dict(size=8, color='#94a3b8'),
+                fixedrange=True # ズーム禁止で安定させる
+            ),
+            yaxis=dict(
+                showgrid=True, 
+                gridcolor='#f1f5f9', 
+                side='right', 
+                tickfont=dict(size=8, color='#94a3b8'),
+                fixedrange=True
+            )
         )
-        
-        # HTML文字列として出力 (CDN利用で軽量化、ツールバー非表示)
+
+        # HTMLとして出力
         chart_html = fig.to_html(
-            full_html=False, 
-            include_plotlyjs='cdn', 
-            config={'displayModeBar': False, 'responsive': True}
+            full_html=False,
+            include_plotlyjs='cdn',
+            config={
+                'displayModeBar': False, 
+                'responsive': True,
+                'staticPlot': False # インタラクティブ性は維持
+            }
         )
         return chart_html
-
+        
     except Exception as e:
         print(f"Chart Error for {ticker}: {e}")
         return f"<p style='color:red; font-size:10px;'>Chart Error</p>"
+

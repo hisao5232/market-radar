@@ -12,3 +12,4 @@ plotly
 pandas
 openpyxl
 xlrd
+numpy
